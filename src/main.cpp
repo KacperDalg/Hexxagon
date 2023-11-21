@@ -1,5 +1,6 @@
 #include <SFML/Graphics.hpp>
 #include <cmath>
+#include <iostream>
 
 enum class Owner {
     NO_OWNER = 0,
@@ -7,9 +8,16 @@ enum class Owner {
     PLAYER_B = 2
 };
 
+enum class State {
+    DEFAULT = 0,
+    CLONE_OPTION = 1,
+    JUMP_OPTION = 2,
+    SELECTED = 3
+};
+
 class Hexagon {
 public:
-    Hexagon(float x, float y, float size, Owner owner) {
+    Hexagon(float x, float y, float size) {
             shape.setPointCount(6);
             for (int i = 0; i < 6; ++i) {
                 float angle = i * 2 * M_PI / 6;
@@ -24,6 +32,9 @@ public:
             circle.setRadius(size * 0.6f); // Promień koła 60% wielkości heksagonu
             circle.setPosition(x - size * 0.6f, y - size * 0.6f);
             circle.setFillColor(sf::Color::Transparent);
+
+            owner = Owner::NO_OWNER;
+            currentState = State::DEFAULT;
     }
 
     void draw(sf::RenderWindow& renderWindow) {
@@ -35,8 +46,11 @@ public:
         return shape.getGlobalBounds().contains(mouseX, mouseY);
     }
 
-    void setHexagonColor(sf::Color color) {
-        shape.setFillColor(color);
+    void setState(State state) {
+        currentState = state;
+        if (state == State::CLONE_OPTION) setColor(sf::Color::Green);
+        if (state == State::JUMP_OPTION) setColor(sf::Color::Yellow);
+        if (state == State::DEFAULT) setColor(sf::Color::White);
     }
 
     void setOwner(Owner newOwner) {
@@ -51,10 +65,15 @@ public:
     }
 
 private:
-    float x, y, size;
+    float x{}, y{}, size{};
     Owner owner;
+    State currentState;
     sf::ConvexShape shape;
     sf::CircleShape circle;
+
+    void setColor(sf::Color color) {
+        shape.setFillColor(color);
+    }
 };
 
 class Board {
@@ -71,56 +90,16 @@ public:
         }
     }
 
-    void clearColors() {
-        for (auto& col : hexagons) {
-            for (auto& hexagon : col) {
-                hexagon.setHexagonColor(sf::Color::White);
-                hexagon.draw(window);
-            }
-        }
-    }
-
     void onMouseClick(float mouseX, float mouseY) {
-        clearColors();
+        resetStates();
         for(int i = 0; i < rows; i++) {
             for(int j = 0; j < hexagons[i].size(); j++) {
-                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getOwner() != Owner::NO_OWNER) {
-                    //DOLNY HEXAGON
-                    if (j < hexagons[i].size() - 1) {
-                        if (hexagons[i][j + 1].getOwner() == Owner::NO_OWNER) hexagons[i][j + 1].setHexagonColor(sf::Color::Green);
-                    }
-                    //GORNY HEXAGON
-                    if (j > 0) {
-                        if (hexagons[i][j - 1].getOwner() == Owner::NO_OWNER) hexagons[i][j - 1].setHexagonColor(sf::Color::Green);
-                    }
-                    //PRAWY GORNY HEXAGON
-                    if (i < (hexagons.size() / 2)) {
-                        if (hexagons[i + 1][j].getOwner() == Owner::NO_OWNER) hexagons[i + 1][j].setHexagonColor(sf::Color::Green);
-                    }
-                    if (i >= (hexagons.size() / 2) && j > 0 && i < hexagons.size() - 1) {
-                        if (hexagons[i + 1][j - 1].getOwner() == Owner::NO_OWNER) hexagons[i + 1][j - 1].setHexagonColor(sf::Color::Green);
-                    }
-                    //PRAWY DOLNY HEXAGON
-                    if (i < (hexagons.size() / 2)) {
-                        if (hexagons[i + 1][j + 1].getOwner() == Owner::NO_OWNER) hexagons[i + 1][j + 1].setHexagonColor(sf::Color::Green);
-                    }
-                    if (i >= (hexagons.size() / 2) && j < hexagons[i].size() - 1 && i < hexagons.size() - 1) {
-                        if (hexagons[i + 1][j].getOwner() == Owner::NO_OWNER) hexagons[i + 1][j].setHexagonColor(sf::Color::Green);
-                    }
-                    //LEWY GORNY HEXAGON
-                    if (i > (hexagons.size() / 2)) {
-                        if (hexagons[i - 1][j].getOwner() == Owner::NO_OWNER) hexagons[i - 1][j].setHexagonColor(sf::Color::Green);
-                    }
-                    if (i <= (hexagons.size() / 2) && j > 0 && i > 0) {
-                        if (hexagons[i - 1][j - 1].getOwner() == Owner::NO_OWNER) hexagons[i - 1][j - 1].setHexagonColor(sf::Color::Green);
-                    }
-                    //LEWY DOLNY HEXAGON
-                    if (i > (hexagons.size() / 2)) {
-                        if (hexagons[i - 1][j + 1].getOwner() == Owner::NO_OWNER) hexagons[i - 1][j + 1].setHexagonColor(sf::Color::Green);
-                    }
-                    if (i <= (hexagons.size() / 2) && j < hexagons[i].size() - 1 && i > 0) {
-                        if (hexagons[i - 1][j].getOwner() == Owner::NO_OWNER) hexagons[i - 1][j].setHexagonColor(sf::Color::Green);
-                    }
+                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) ) {
+                    //ZIELONE POLA
+                    setHexagonCloneOptions(i, j);
+
+                    //ZOLTE POLA
+                    setHexagonJumpOptions(i, j);
 
                     return;
                 }
@@ -143,7 +122,7 @@ private:
                 float x = window.getSize().x / 2 - i * 1.5 * hexSize;
                 float y = window.getSize().y / 2 + hexagonInitialY - i * hexSize * sqrt(3) / 2 - j * hexSize * sqrt(3);
 
-                hexagons[ceil(cols/2) - i].emplace_back(x, y, hexSize, Owner::NO_OWNER);
+                hexagons[ceil(cols/2) - i].emplace_back(x, y, hexSize);
             }
         }
         for (int i = 0; i < floor(cols/2); i++) {
@@ -151,17 +130,170 @@ private:
                 float x = window.getSize().x / 2 + (i + 1) * 1.5 * hexSize;
                 float y = window.getSize().y / 2 + hexagonInitialY - hexSize * sqrt(3) / 2 - i * hexSize * sqrt(3) / 2 - j * hexSize * sqrt(3);
 
-                hexagons[ceil(cols/2) + 1 + i].emplace_back(x, y, hexSize, Owner::NO_OWNER);
+                hexagons[ceil(cols/2) + 1 + i].emplace_back(x, y, hexSize);
             }
         }
 
-        for(int i = 0; i < hexagons.size(); i++){
+        //ROWS AND COLUMNS CLEANUP + SETTING START POSITION FOR PLAYERS
+        for(int i = 0; i < hexagons.size(); i++) {
             std::reverse(hexagons[i].begin(), hexagons[i].end());
 
-            for(int j = 0; j < hexagons[i].size(); j++){
+            for(int j = 0; j < hexagons[i].size(); j++) {
                 if(i == 0 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Owner::PLAYER_A);
                 if(i == hexagons.size() - 1 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Owner::PLAYER_B);
             }
+        }
+    }
+
+    void setHexagonState(int column, int row, State state) {
+        if (hexagons[column][row].getOwner() == Owner::NO_OWNER)
+            hexagons[column][row].setState(state);
+    }
+
+    void resetStates() {
+        for (auto& col : hexagons) {
+            for (auto& hexagon : col) {
+                hexagon.setState(State::DEFAULT);
+                hexagon.draw(window);
+            }
+        }
+    }
+
+    void setHexagonCloneOptions(int column, int row) {
+        //DOLNY HEXAGON
+        if (row < hexagons[column].size() - 1) {
+            setHexagonState(column, row + 1, State::CLONE_OPTION);
+        }
+        //GORNY HEXAGON
+        if (row > 0) {
+            setHexagonState(column, row - 1, State::CLONE_OPTION);
+        }
+        //PRAWY GORNY HEXAGON
+        if (column < (hexagons.size() / 2)) {
+            setHexagonState(column + 1, row, State::CLONE_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row > 0 && column < hexagons.size() - 1) {
+            setHexagonState(column + 1, row - 1, State::CLONE_OPTION);
+        }
+        //PRAWY DOLNY HEXAGON
+        if (column < (hexagons.size() / 2)) {
+            setHexagonState(column + 1, row + 1, State::CLONE_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row < hexagons[column].size() - 1 && column < hexagons.size() - 1) {
+            setHexagonState(column + 1, row, State::CLONE_OPTION);
+        }
+        //LEWY GORNY HEXAGON
+        if (column > (hexagons.size() / 2)) {
+            setHexagonState(column - 1, row, State::CLONE_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row > 0 && column > 0) {
+            setHexagonState(column - 1, row - 1, State::CLONE_OPTION);
+        }
+        //LEWY DOLNY HEXAGON
+        if (column > (hexagons.size() / 2)) {
+            setHexagonState(column - 1, row + 1, State::CLONE_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 1 && column > 0) {
+            setHexagonState(column - 1, row, State::CLONE_OPTION);
+        }
+    }
+
+    void setHexagonJumpOptions(int column, int row) {
+        //GORNY HEXAGON
+        if (row > 1) {
+            setHexagonState(column, row - 2, State::JUMP_OPTION);
+        }
+        //PRAWY GÓRNY PIERWSZY HEXAGON
+        if (column < (hexagons.size() / 2) && row > 0) {
+            setHexagonState(column + 1, row - 1, State::JUMP_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 1) {
+            setHexagonState(column + 1, row - 2, State::JUMP_OPTION);
+        }
+        //PRAWY GÓRNY DRUGI HEXAGON
+        if (column < (hexagons.size() / 2) - 1) {
+            setHexagonState(column + 2, row, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) - 1 && row > 0) {
+            setHexagonState(column + 2, row - 1, State::JUMP_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 2) {
+            setHexagonState(column + 2, row - 2, State::JUMP_OPTION);
+        }
+        //PRAWY HEXAGON
+        if (column < (hexagons.size() / 2) - 1) {
+            setHexagonState(column + 2, row + 1, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) - 1) {
+            setHexagonState(column + 2, row, State::JUMP_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 && column < hexagons.size() - 2) {
+            setHexagonState(column + 2, row - 1, State::JUMP_OPTION);
+        }
+        //PRAWY DOLNY PIERWSZY HEXAGON
+        if (column < (hexagons.size() / 2) - 1) {
+            setHexagonState(column + 2, row + 2, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 1) {
+            setHexagonState(column + 2, row + 1, State::JUMP_OPTION);
+        }
+        if (column > (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 2 && column < hexagons.size() - 2) {
+            setHexagonState(column + 2, row, State::JUMP_OPTION);
+        }
+        //PRAWY DOLNY DRUGI HEXAGON
+        if (column < (hexagons.size() / 2) && row < hexagons.size() - 1) {
+            setHexagonState(column + 1, row + 2, State::JUMP_OPTION);
+        }
+        if (column >= (hexagons.size() / 2) && row < hexagons.size() - 2 && column < hexagons.size() - 1) {
+            setHexagonState(column + 1, row + 1, State::JUMP_OPTION);
+        }
+        //DOLNY HEXAGON
+        if (row < hexagons[column].size() - 2) {
+            setHexagonState(column, row + 2, State::JUMP_OPTION);
+        }
+        //LEWY DOLNY PIERWSZY HEXAGON
+        if (column > (hexagons.size() / 2) && row < hexagons[column].size() - 1) {
+            setHexagonState(column - 1, row + 2, State::JUMP_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 0) {
+            setHexagonState(column - 1, row + 1, State::JUMP_OPTION);
+        }
+        //LEWY DOLNY DRUGI HEXAGON
+        if (column > (hexagons.size() / 2) + 1) {
+            setHexagonState(column - 2, row + 2, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) + 1 && row < hexagons[column].size() - 1) {
+            setHexagonState(column - 2, row + 1, State::JUMP_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 1) {
+            setHexagonState(column - 2, row, State::JUMP_OPTION);
+        }
+        //LEWY HEXAGON
+        if (column > (hexagons.size() / 2) + 1) {
+            setHexagonState(column - 2, row + 1, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) + 1) {
+            setHexagonState(column - 2, row, State::JUMP_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 && column >= 2) {
+            setHexagonState(column - 2, row - 1, State::JUMP_OPTION);
+        }
+        //LEWY GORNY PIERWSZY HEXAGON
+        if (column > (hexagons.size() / 2) + 1) {
+            setHexagonState(column - 2, row, State::JUMP_OPTION);
+        }
+        if (column == (hexagons.size() / 2) + 1 && row > 0) {
+            setHexagonState(column - 2, row - 1, State::JUMP_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row > 1 && column > 1) {
+            setHexagonState(column - 2, row - 2, State::JUMP_OPTION);
+        }
+        //LEWY GORNY DRUGI HEXAGON
+        if (column > (hexagons.size() / 2) && row > 0) {
+            setHexagonState(column - 1, row - 1, State::JUMP_OPTION);
+        }
+        if (column <= (hexagons.size() / 2) && row > 1 && column > 0) {
+            setHexagonState(column - 1, row - 2, State::JUMP_OPTION);
         }
     }
 };
