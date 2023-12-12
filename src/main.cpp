@@ -1,9 +1,10 @@
 #include <SFML/Graphics.hpp>
 #include <cmath>
 #include <iostream>
+#include <utility>
 
-enum class Owner {
-    NO_OWNER = 0,
+enum class Player {
+    NO_PLAYER = 0,
     PLAYER_A = 1,
     PLAYER_B = 2
 };
@@ -15,26 +16,31 @@ enum class State {
     SELECTED = 3
 };
 
+enum class AdjacentHexagonsMode {
+    TAKE_OVER_MODE = 0,
+    CLONE_OPTIONS_VIEW_MODE = 1,
+};
+
 class Hexagon {
 public:
-    Hexagon(float x, float y, float size, sf::RenderWindow& window) : window(window) {
-            shape.setPointCount(6);
-            for (int i = 0; i < 6; ++i) {
-                float angle = i * 2 * M_PI / 6;
-                float xPos = x + size * std::cos(angle);
-                float yPos = y + size * std::sin(angle);
-                shape.setPoint(i, sf::Vector2f(xPos, yPos));
-            }
-            shape.setFillColor(sf::Color::White);
-            shape.setOutlineThickness(3.0f);
-            shape.setOutlineColor(sf::Color::Black);
+    Hexagon(float x, float y, float size, sf::RenderWindow &window) : window(window) {
+        shape.setPointCount(6);
+        for (int i = 0; i < 6; ++i) {
+            float angle = i * 2 * M_PI / 6;
+            float xPos = x + size * std::cos(angle);
+            float yPos = y + size * std::sin(angle);
+            shape.setPoint(i, sf::Vector2f(xPos, yPos));
+        }
+        shape.setFillColor(sf::Color::White);
+        shape.setOutlineThickness(3.0f);
+        shape.setOutlineColor(sf::Color::Black);
 
-            circle.setRadius(size * 0.6f); // Promień koła 60% wielkości heksagonu
-            circle.setPosition(x - size * 0.6f, y - size * 0.6f);
-            circle.setFillColor(sf::Color::Transparent);
+        circle.setRadius(size * 0.6f);
+        circle.setPosition(x - size * 0.6f, y - size * 0.6f);
+        circle.setFillColor(sf::Color::Transparent);
 
-            owner = Owner::NO_OWNER;
-            currentState = State::DEFAULT;
+        owner = Player::NO_PLAYER;
+        currentState = State::DEFAULT;
     }
 
     void draw() {
@@ -48,35 +54,51 @@ public:
 
     void setState(State state) {
         currentState = state;
-        if (state == State::CLONE_OPTION) setColor(sf::Color::Green);
-        if (state == State::JUMP_OPTION) setColor(sf::Color::Yellow);
-        if (state == State::DEFAULT) setColor(sf::Color::White);
+        if (state == State::CLONE_OPTION) setFieldColor(sf::Color::Green);
+        if (state == State::JUMP_OPTION) setFieldColor(sf::Color::Yellow);
+        if (state == State::DEFAULT) setFieldColor(sf::Color::White);
     }
 
     State getState() {
         return currentState;
     }
 
-    void setOwner(Owner newOwner) {
-        owner = newOwner;
-        if (newOwner == Owner::PLAYER_A) setCircleColor(sf::Color::Red);
-        if (newOwner == Owner::PLAYER_B) setCircleColor(sf::Color::Blue);
-        if (newOwner == Owner::NO_OWNER) setCircleColor(sf::Color::Transparent);
+    bool belongsToEnemy(Player currentPlayer) {
+        return getOwner() != Player::NO_PLAYER &&
+               getOwner() != currentPlayer;
     }
 
-    Owner getOwner() {
+    void applyAdjacentHexagonsMode(AdjacentHexagonsMode mode, Player currentPlayer) {
+        if (mode == AdjacentHexagonsMode::TAKE_OVER_MODE) {
+            if (belongsToEnemy(currentPlayer))
+                setOwner(currentPlayer);
+        }
+        if (mode == AdjacentHexagonsMode::CLONE_OPTIONS_VIEW_MODE) {
+            if (getOwner() == Player::NO_PLAYER)
+                setState(State::CLONE_OPTION);
+        }
+    }
+
+    void setOwner(Player newOwner) {
+        owner = newOwner;
+        if (newOwner == Player::PLAYER_A) setCircleColor(sf::Color::Red);
+        if (newOwner == Player::PLAYER_B) setCircleColor(sf::Color::Blue);
+        if (newOwner == Player::NO_PLAYER) setCircleColor(sf::Color::Transparent);
+    }
+
+    Player getOwner() {
         return owner;
     }
 
 private:
     float x{}, y{}, size{};
-    Owner owner;
+    Player owner;
     State currentState;
     sf::ConvexShape shape;
     sf::CircleShape circle;
-    sf::RenderWindow& window;
+    sf::RenderWindow &window;
 
-    void setColor(sf::Color color) {
+    void setFieldColor(sf::Color color) {
         shape.setFillColor(color);
     }
 
@@ -87,53 +109,63 @@ private:
 
 class Board {
 public:
-    Board(int rows, int cols, float hexSize, sf::RenderWindow& window) : rows(rows), cols(cols), hexSize(hexSize), window(window) {
+    Board(int rows, int cols, float hexSize, sf::RenderWindow &window) : rows(rows), cols(cols), hexSize(hexSize),
+                                                                         window(window) {
         initializeHexagons();
+        currentPlayer = Player::PLAYER_A;
     }
 
     void draw() {
-        for (auto& col : hexagons) {
-            for (auto& hexagon : col) {
+        for (auto &col: hexagons) {
+            for (auto &hexagon: col) {
                 hexagon.draw();
             }
         }
     }
 
     void onMouseClick(float mouseX, float mouseY) {
-        for(int i = 0; i < rows; i++) {
-            for(int j = 0; j < hexagons[i].size(); j++) {
-                if (hexagons[i][j].containsCoordinates(mouseX, mouseY)
-                    && (hexagons[i][j].getState() == State::DEFAULT || hexagons[i][j].getState() == State::SELECTED)) {
-                    resetStates();
-                }
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < hexagons[i].size(); j++) {
+                if (hexagons[i][j].containsCoordinates(mouseX, mouseY)) {
 
-                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getOwner() != Owner::NO_OWNER) {
-                    hexagons[i][j].setState(State::SELECTED);
+                    if (hexagons[i][j].getState() == State::DEFAULT || hexagons[i][j].getState() == State::SELECTED) {
+                        resetStates();
+                    }
 
-                    //ZIELONE POLA
-                    setHexagonCloneOptions(i, j);
+                    if (hexagons[i][j].getOwner() == currentPlayer) {
+                        hexagons[i][j].setState(State::SELECTED);
 
-                    //ZOLTE POLA
-                    setHexagonJumpOptions(i, j);
+                        //GREEN FIELDS
+                        setAdjacentHexagons(i, j, AdjacentHexagonsMode::CLONE_OPTIONS_VIEW_MODE);
 
-                    return;
-                }
+                        //YELLOW FIELDS
+                        setHexagonJumpOptions();
 
-                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getState() == State::CLONE_OPTION) {
-                    hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
-                    resetStates();
+                        return;
+                    }
 
-                    return;
-                }
+                    if (hexagons[i][j].getState() == State::CLONE_OPTION) {
+                        hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
+                        setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
-                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getState() == State::JUMP_OPTION) {
-                    Hexagon& selectedHexagon = getSelectedHexagon();
+                        checkForWinner();
+                        resetStates();
+                        changePlayer();
+                        return;
+                    }
 
-                    hexagons[i][j].setOwner(selectedHexagon.getOwner());
-                    selectedHexagon.setOwner(Owner::NO_OWNER);
-                    resetStates();
+                    if (hexagons[i][j].getState() == State::JUMP_OPTION) {
+                        Hexagon &selectedHexagon = getSelectedHexagon();
 
-                    return;
+                        hexagons[i][j].setOwner(selectedHexagon.getOwner());
+                        selectedHexagon.setOwner(Player::NO_PLAYER);
+                        setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
+
+                        checkForWinner();
+                        resetStates();
+                        changePlayer();
+                        return;
+                    }
                 }
             }
         }
@@ -142,46 +174,67 @@ public:
 private:
     int rows, cols;
     float hexSize;
-    sf::RenderWindow& window;
+    sf::RenderWindow &window;
     std::vector<std::vector<Hexagon>> hexagons;
+    Player currentPlayer;
 
     void initializeHexagons() {
-        int hexagonInitialY = floor(rows/2) * hexSize * sqrt(3);
+        int hexagonInitialY = floor(rows / 2) * hexSize * sqrt(3);
         hexagons.resize(cols);
 
-        for (int i = 0; i <= ceil(cols/2); i++) {
+        for (int i = 0; i <= ceil(cols / 2); i++) {
             for (int j = 0; j < rows - i; j++) {
                 float x = window.getSize().x / 2 - i * 1.5 * hexSize;
                 float y = window.getSize().y / 2 + hexagonInitialY - i * hexSize * sqrt(3) / 2 - j * hexSize * sqrt(3);
 
-                hexagons[ceil(cols/2) - i].emplace_back(x, y, hexSize, window);
+                hexagons[ceil(cols / 2) - i].emplace_back(x, y, hexSize, window);
             }
         }
-        for (int i = 0; i < floor(cols/2); i++) {
-            for (int j = 0; j < rows - 1 - i; j++){
+        for (int i = 0; i < floor(cols / 2); i++) {
+            for (int j = 0; j < rows - 1 - i; j++) {
                 float x = window.getSize().x / 2 + (i + 1) * 1.5 * hexSize;
-                float y = window.getSize().y / 2 + hexagonInitialY - hexSize * sqrt(3) / 2 - i * hexSize * sqrt(3) / 2 - j * hexSize * sqrt(3);
+                float y = window.getSize().y / 2 + hexagonInitialY - hexSize * sqrt(3) / 2 - i * hexSize * sqrt(3) / 2 -
+                          j * hexSize * sqrt(3);
 
-                hexagons[ceil(cols/2) + 1 + i].emplace_back(x, y, hexSize, window);
+                hexagons[ceil(cols / 2) + 1 + i].emplace_back(x, y, hexSize, window);
             }
         }
 
         //ROWS AND COLUMNS CLEANUP + SETTING START POSITION FOR PLAYERS
-        for(int i = 0; i < hexagons.size(); i++) {
+        for (int i = 0; i < hexagons.size(); i++) {
             std::vector<Hexagon> reversedHexagons(hexagons[i].rbegin(), hexagons[i].rend());
 
             hexagons[i] = std::move(reversedHexagons);
 
-            for(int j = 0; j < hexagons[i].size(); j++) {
-                if(i == 0 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Owner::PLAYER_A);
-                if(i == hexagons.size() - 1 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Owner::PLAYER_B);
+            for (int j = 0; j < hexagons[i].size(); j++) {
+                if (i == 0 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Player::PLAYER_A);
+                if (i == hexagons.size() - 1 && (j == 0 || j == hexagons[i].size() - 1))
+                    hexagons[i][j].setOwner(Player::PLAYER_B);
             }
         }
     }
 
-    Hexagon& getSelectedHexagon() {
-        for (auto& col : hexagons) {
-            for (auto& hexagon : col) {
+    void changePlayer() {
+        if (currentPlayer == Player::PLAYER_A) {
+            currentPlayer = Player::PLAYER_B;
+        } else {
+            currentPlayer = Player::PLAYER_A;
+        }
+    }
+
+    Hexagon &getHexagon(int column, int row) {
+        for (int i = 0; i < hexagons.size(); i++) {
+            for (int j = 0; j < hexagons[i].size(); j++) {
+                if (i == column && j == row) {
+                    return hexagons[i][j];
+                }
+            }
+        }
+    }
+
+    Hexagon &getSelectedHexagon() {
+        for (auto &col: hexagons) {
+            for (auto &hexagon: col) {
                 if (hexagon.getState() == State::SELECTED) {
                     return hexagon;
                 }
@@ -189,167 +242,284 @@ private:
         }
     }
 
-    void setHexagonState(int column, int row, State state) {
-        if (hexagons[column][row].getOwner() == Owner::NO_OWNER)
-            hexagons[column][row].setState(state);
+    std::pair<int, int> getSelectedHexagonBoardPosition() {
+        for (int i = 0; i < hexagons.size(); i++) {
+            for (int j = 0; j < hexagons[i].size(); j++) {
+                if (hexagons[i][j].getState() == State::SELECTED) {
+                    return std::make_pair(i, j);
+                }
+            }
+        }
+    }
+
+    void checkForWinner() {
+        int playerACount = 0;
+        int playerBCount = 0;
+        int emptyHexagonsCount = 0;
+
+        for (auto &col: hexagons) {
+            for (auto &hexagon: col) {
+                if (hexagon.getOwner() == Player::PLAYER_A) {
+                    playerACount++;
+                }
+                if (hexagon.getOwner() == Player::PLAYER_B) {
+                    playerBCount++;
+                }
+                if (hexagon.getOwner() == Player::NO_PLAYER) {
+                    emptyHexagonsCount++;
+                }
+            }
+        }
+
+        if (emptyHexagonsCount == 0) {
+            if (playerACount > playerBCount) {
+                std::cout << "PLAYER A WINS!";
+                window.close();
+            }
+            if (playerBCount > playerACount) {
+                std::cout << "PLAYER B WINS!";
+                window.close();
+            }
+            if (playerBCount == playerACount) {
+                std::cout << "DRAW!";
+                window.close();
+            }
+        }
+        if (playerBCount == 0) {
+            std::cout << "PLAYER A WINS!";
+            window.close();
+        }
+        if (playerACount == 0) {
+            std::cout << "PLAYER B WINS!";
+            window.close();
+        }
     }
 
     void resetStates() {
-        for (auto& col : hexagons) {
-            for (auto& hexagon : col) {
+        for (auto &col: hexagons) {
+            for (auto &hexagon: col) {
                 hexagon.setState(State::DEFAULT);
             }
         }
     }
 
-    void setHexagonCloneOptions(int column, int row) {
-        //DOLNY HEXAGON
-        if (row < hexagons[column].size() - 1) {
-            setHexagonState(column, row + 1, State::CLONE_OPTION);
-        }
-        //GORNY HEXAGON
+    void setAdjacentHexagons(int column, int row, AdjacentHexagonsMode mode) {
+        //TOP HEXAGON
         if (row > 0) {
-            setHexagonState(column, row - 1, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column, row - 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
-        //PRAWY GORNY HEXAGON
+        //RIGHT TOP HEXAGON
         if (column < (hexagons.size() / 2)) {
-            setHexagonState(column + 1, row, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column + 1, row);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
         if (column >= (hexagons.size() / 2) && row > 0 && column < hexagons.size() - 1) {
-            setHexagonState(column + 1, row - 1, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column + 1, row - 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
-        //PRAWY DOLNY HEXAGON
+        //RIGHT BOTTOM HEXAGON
         if (column < (hexagons.size() / 2)) {
-            setHexagonState(column + 1, row + 1, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column + 1, row + 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
         if (column >= (hexagons.size() / 2) && row < hexagons[column].size() - 1 && column < hexagons.size() - 1) {
-            setHexagonState(column + 1, row, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column + 1, row);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
-        //LEWY GORNY HEXAGON
+        //BOTTOM HEXAGON
+        if (row < hexagons[column].size() - 1) {
+            auto &hexagon = getHexagon(column, row + 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
+        }
+        //LEFT BOTTOM HEXAGON
         if (column > (hexagons.size() / 2)) {
-            setHexagonState(column - 1, row, State::CLONE_OPTION);
-        }
-        if (column <= (hexagons.size() / 2) && row > 0 && column > 0) {
-            setHexagonState(column - 1, row - 1, State::CLONE_OPTION);
-        }
-        //LEWY DOLNY HEXAGON
-        if (column > (hexagons.size() / 2)) {
-            setHexagonState(column - 1, row + 1, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column - 1, row + 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
         if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 1 && column > 0) {
-            setHexagonState(column - 1, row, State::CLONE_OPTION);
+            auto &hexagon = getHexagon(column - 1, row);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
+        }
+        //LEFT TOP HEXAGON
+        if (column > (hexagons.size() / 2)) {
+            auto &hexagon = getHexagon(column - 1, row);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
+        }
+        if (column <= (hexagons.size() / 2) && row > 0 && column > 0) {
+            auto &hexagon = getHexagon(column - 1, row - 1);
+            hexagon.applyAdjacentHexagonsMode(mode, currentPlayer);
         }
     }
 
-    void setHexagonJumpOptions(int column, int row) {
-        //GORNY HEXAGON
+    void setHexagonJumpOptions() {
+        std::pair<int, int> hexagonPosition = getSelectedHexagonBoardPosition();
+        int column = hexagonPosition.first;
+        int row = hexagonPosition.second;
+
+        //TOP HEXAGON
         if (row > 1) {
-            setHexagonState(column, row - 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column, row - 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //PRAWY GÓRNY PIERWSZY HEXAGON
+        //TOP RIGHT FIRST HEXAGON
         if (column < (hexagons.size() / 2) && row > 0) {
-            setHexagonState(column + 1, row - 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 1, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 1) {
-            setHexagonState(column + 1, row - 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 1, row - 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //PRAWY GÓRNY DRUGI HEXAGON
+        //TOP RIGHT SECOND HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
-            setHexagonState(column + 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1 && row > 0) {
-            setHexagonState(column + 2, row - 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 2) {
-            setHexagonState(column + 2, row - 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row - 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //PRAWY HEXAGON
+        //RIGHT HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
-            setHexagonState(column + 2, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1) {
-            setHexagonState(column + 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        if (column >= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 && column < hexagons.size() - 2) {
-            setHexagonState(column + 2, row - 1, State::JUMP_OPTION);
+        if (column >= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 &&
+            column < hexagons.size() - 2) {
+            auto &hexagon = getHexagon(column + 2, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //PRAWY DOLNY PIERWSZY HEXAGON
+        //BOTTOM RIGHT FIRST HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
-            setHexagonState(column + 2, row + 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row + 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 1) {
-            setHexagonState(column + 2, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column > (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 2 && column < hexagons.size() - 2) {
-            setHexagonState(column + 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //PRAWY DOLNY DRUGI HEXAGON
+        //BOTTOM RIGHT SECOND HEXAGON
         if (column < (hexagons.size() / 2) && row < hexagons[column].size() - 1) {
-            setHexagonState(column + 1, row + 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 1, row + 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column < hexagons.size() - 1) {
-            setHexagonState(column + 1, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column + 1, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //DOLNY HEXAGON
+        //BOTTOM HEXAGON
         if (row < hexagons[column].size() - 2) {
-            setHexagonState(column, row + 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column, row + 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //LEWY DOLNY PIERWSZY HEXAGON
+        //BOTTOM LEFT FIRST HEXAGON
         if (column > (hexagons.size() / 2) && row < hexagons[column].size() - 1) {
-            setHexagonState(column - 1, row + 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 1, row + 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 0) {
-            setHexagonState(column - 1, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 1, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //LEWY DOLNY DRUGI HEXAGON
+        //BOTTOM LEFT SECOND HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
-            setHexagonState(column - 2, row + 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row + 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1 && row < hexagons[column].size() - 1) {
-            setHexagonState(column - 2, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 1) {
-            setHexagonState(column - 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //LEWY HEXAGON
+        //LEFT HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
-            setHexagonState(column - 2, row + 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row + 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1) {
-            setHexagonState(column - 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 && column >= 2) {
-            setHexagonState(column - 2, row - 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //LEWY GORNY PIERWSZY HEXAGON
+        //TOP LEFT FIRST HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
-            setHexagonState(column - 2, row, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1 && row > 0) {
-            setHexagonState(column - 2, row - 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 1 && column > 1) {
-            setHexagonState(column - 2, row - 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 2, row - 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
-        //LEWY GORNY DRUGI HEXAGON
+        //TOP LEFT SECOND HEXAGON
         if (column > (hexagons.size() / 2) && row > 0) {
-            setHexagonState(column - 1, row - 1, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 1, row - 1);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 1 && column > 0) {
-            setHexagonState(column - 1, row - 2, State::JUMP_OPTION);
+            auto &hexagon = getHexagon(column - 1, row - 2);
+            if (hexagon.getOwner() == Player::NO_PLAYER)
+                hexagon.setState(State::JUMP_OPTION);
         }
     }
 };
 
-int main()
-{
-    auto window = sf::RenderWindow{ { 1000, 600 }, "Hexxagon" };
+int main() {
+    auto window = sf::RenderWindow{{1000, 600}, "Hexxagon"};
     window.setFramerateLimit(144);
 
     Board hexBoard(9, 9, 35, window);
 
-    while (window.isOpen())
-    {
+    while (window.isOpen()) {
         sf::Event event;
         while (window.pollEvent(event)) {
 
