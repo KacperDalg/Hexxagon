@@ -167,6 +167,23 @@ public:
                         return;
                     }
                 }
+
+                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getState() == State::CLONE_OPTION) {
+                    hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
+                    resetStates();
+
+                    return;
+                }
+
+                if (hexagons[i][j].containsCoordinates(mouseX, mouseY) && hexagons[i][j].getState() == State::JUMP_OPTION) {
+                    Hexagon& selectedHexagon = getSelectedHexagon();
+
+                    hexagons[i][j].setOwner(selectedHexagon.getOwner());
+                    selectedHexagon.setOwner(Owner::NO_OWNER);
+                    resetStates();
+
+                    return;
+                }
             }
         }
     }
