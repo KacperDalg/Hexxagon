@@ -107,10 +107,50 @@ private:
     }
 };
 
+class Counter {
+public:
+    Counter(sf::RenderWindow &window, Player player) : window(window) {
+        if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
+            throw std::runtime_error("Unable to load the font.");
+        }
+
+        text.setFont(font);
+        text.setCharacterSize(30);
+
+        owningPlayer = player;
+        if (player == Player::PLAYER_A) {
+            text.setPosition(20, 20);
+            text.setFillColor(sf::Color::Red);
+        }
+        if (player == Player::PLAYER_B) {
+            text.setPosition(window.getSize().x - 190, 20);
+            text.setFillColor(sf::Color::Blue);
+        }
+
+        updatePoints(3);
+    }
+
+    void draw() {
+        window.draw(text);
+    }
+
+    void updatePoints(int points) {
+        std::string playerString = (owningPlayer == Player::PLAYER_A) ? "Player A" : "Player B";
+        text.setString(playerString + "\n     " + std::to_string(points));
+    }
+
+private:
+    sf::Font font;
+    sf::Text text;
+    Player owningPlayer;
+    sf::RenderWindow &window;
+};
+
 class Board {
 public:
     Board(int rows, int cols, float hexSize, sf::RenderWindow &window) : rows(rows), cols(cols), hexSize(hexSize),
-                                                                         window(window) {
+                                                                         window(window), playerACounter(window, Player::PLAYER_A),
+                                                                         playerBCounter(window, Player::PLAYER_B) {
         initializeHexagons();
         currentPlayer = Player::PLAYER_A;
     }
@@ -121,6 +161,8 @@ public:
                 hexagon.draw();
             }
         }
+        playerACounter.draw();
+        playerBCounter.draw();
     }
 
     void onMouseClick(float mouseX, float mouseY) {
@@ -148,6 +190,7 @@ public:
                         hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
+                        calculatePoints();
                         checkForWinner();
                         resetStates();
                         changePlayer();
@@ -161,6 +204,7 @@ public:
                         selectedHexagon.setOwner(Player::NO_PLAYER);
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
+                        calculatePoints();
                         checkForWinner();
                         resetStates();
                         changePlayer();
@@ -172,10 +216,11 @@ public:
     }
 
 private:
-    int rows, cols;
+    int rows, cols, playerAPoints, playerBPoints, emptyFields;
     float hexSize;
     sf::RenderWindow &window;
     std::vector<std::vector<Hexagon>> hexagons;
+    Counter playerACounter, playerBCounter;
     Player currentPlayer;
 
     void initializeHexagons() {
@@ -207,8 +252,12 @@ private:
             hexagons[i] = std::move(reversedHexagons);
 
             for (int j = 0; j < hexagons[i].size(); j++) {
-                if (i == 0 && (j == 0 || j == hexagons[i].size() - 1)) hexagons[i][j].setOwner(Player::PLAYER_A);
-                if (i == hexagons.size() - 1 && (j == 0 || j == hexagons[i].size() - 1))
+                if (j == 0 && (i == 0 || i == hexagons.size() - 1)
+                || i == hexagons.size() / 2 && j == hexagons[i].size() - 1)
+                    hexagons[i][j].setOwner(Player::PLAYER_A);
+
+                if (j == hexagons[i].size() - 1 && (i == 0 || i == hexagons.size() - 1)
+                    || i == hexagons.size() / 2 && j == 0)
                     hexagons[i][j].setOwner(Player::PLAYER_B);
             }
         }
@@ -252,44 +301,49 @@ private:
         }
     }
 
-    void checkForWinner() {
-        int playerACount = 0;
-        int playerBCount = 0;
-        int emptyHexagonsCount = 0;
+    void calculatePoints() {
+        playerAPoints = 0;
+        playerBPoints = 0;
+        emptyFields = 0;
 
         for (auto &col: hexagons) {
             for (auto &hexagon: col) {
                 if (hexagon.getOwner() == Player::PLAYER_A) {
-                    playerACount++;
+                    playerAPoints++;
                 }
                 if (hexagon.getOwner() == Player::PLAYER_B) {
-                    playerBCount++;
+                    playerBPoints++;
                 }
                 if (hexagon.getOwner() == Player::NO_PLAYER) {
-                    emptyHexagonsCount++;
+                    emptyFields++;
                 }
             }
         }
 
-        if (emptyHexagonsCount == 0) {
-            if (playerACount > playerBCount) {
+        playerACounter.updatePoints(playerAPoints);
+        playerBCounter.updatePoints(playerBPoints);
+    }
+
+    void checkForWinner() {
+        if (emptyFields == 0) {
+            if (playerAPoints > playerBPoints) {
                 std::cout << "PLAYER A WINS!";
                 window.close();
             }
-            if (playerBCount > playerACount) {
+            if (playerBPoints > playerAPoints) {
                 std::cout << "PLAYER B WINS!";
                 window.close();
             }
-            if (playerBCount == playerACount) {
+            if (playerBPoints == playerAPoints) {
                 std::cout << "DRAW!";
                 window.close();
             }
         }
-        if (playerBCount == 0) {
+        if (playerBPoints == 0) {
             std::cout << "PLAYER A WINS!";
             window.close();
         }
-        if (playerACount == 0) {
+        if (playerAPoints == 0) {
             std::cout << "PLAYER B WINS!";
             window.close();
         }
@@ -535,7 +589,7 @@ int main() {
 
         window.clear();
 
-        hexBoard.draw();
+        //hexBoard.draw();
 
         window.display();
     }
