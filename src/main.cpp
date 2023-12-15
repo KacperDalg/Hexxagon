@@ -9,7 +9,7 @@ enum class Player {
     PLAYER_B = 2
 };
 
-enum class State {
+enum class HexagonState {
     DEFAULT = 0,
     CLONE_OPTION = 1,
     JUMP_OPTION = 2,
@@ -19,6 +19,11 @@ enum class State {
 enum class AdjacentHexagonsMode {
     TAKE_OVER_MODE = 0,
     CLONE_OPTIONS_VIEW_MODE = 1,
+};
+
+enum class GameState {
+    Menu,
+    Game
 };
 
 class Hexagon {
@@ -40,7 +45,7 @@ public:
         circle.setFillColor(sf::Color::Transparent);
 
         owner = Player::NO_PLAYER;
-        currentState = State::DEFAULT;
+        currentState = HexagonState::DEFAULT;
     }
 
     void draw() {
@@ -52,14 +57,14 @@ public:
         return shape.getGlobalBounds().contains(mouseX, mouseY);
     }
 
-    void setState(State state) {
+    void setState(HexagonState state) {
         currentState = state;
-        if (state == State::CLONE_OPTION) setFieldColor(sf::Color::Green);
-        if (state == State::JUMP_OPTION) setFieldColor(sf::Color::Yellow);
-        if (state == State::DEFAULT) setFieldColor(sf::Color::White);
+        if (state == HexagonState::CLONE_OPTION) setFieldColor(sf::Color::Green);
+        if (state == HexagonState::JUMP_OPTION) setFieldColor(sf::Color::Yellow);
+        if (state == HexagonState::DEFAULT) setFieldColor(sf::Color::White);
     }
 
-    State getState() {
+    HexagonState getState() {
         return currentState;
     }
 
@@ -75,7 +80,7 @@ public:
         }
         if (mode == AdjacentHexagonsMode::CLONE_OPTIONS_VIEW_MODE) {
             if (getOwner() == Player::NO_PLAYER)
-                setState(State::CLONE_OPTION);
+                setState(HexagonState::CLONE_OPTION);
         }
     }
 
@@ -93,7 +98,7 @@ public:
 private:
     float x{}, y{}, size{};
     Player owner;
-    State currentState;
+    HexagonState currentState;
     sf::ConvexShape shape;
     sf::CircleShape circle;
     sf::RenderWindow &window;
@@ -170,12 +175,12 @@ public:
             for (int j = 0; j < hexagons[i].size(); j++) {
                 if (hexagons[i][j].containsCoordinates(mouseX, mouseY)) {
 
-                    if (hexagons[i][j].getState() == State::DEFAULT || hexagons[i][j].getState() == State::SELECTED) {
+                    if (hexagons[i][j].getState() == HexagonState::DEFAULT || hexagons[i][j].getState() == HexagonState::SELECTED) {
                         resetStates();
                     }
 
                     if (hexagons[i][j].getOwner() == currentPlayer) {
-                        hexagons[i][j].setState(State::SELECTED);
+                        hexagons[i][j].setState(HexagonState::SELECTED);
 
                         //GREEN FIELDS
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::CLONE_OPTIONS_VIEW_MODE);
@@ -186,7 +191,7 @@ public:
                         return;
                     }
 
-                    if (hexagons[i][j].getState() == State::CLONE_OPTION) {
+                    if (hexagons[i][j].getState() == HexagonState::CLONE_OPTION) {
                         hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
@@ -197,7 +202,7 @@ public:
                         return;
                     }
 
-                    if (hexagons[i][j].getState() == State::JUMP_OPTION) {
+                    if (hexagons[i][j].getState() == HexagonState::JUMP_OPTION) {
                         Hexagon &selectedHexagon = getSelectedHexagon();
 
                         hexagons[i][j].setOwner(selectedHexagon.getOwner());
@@ -284,7 +289,7 @@ private:
     Hexagon &getSelectedHexagon() {
         for (auto &col: hexagons) {
             for (auto &hexagon: col) {
-                if (hexagon.getState() == State::SELECTED) {
+                if (hexagon.getState() == HexagonState::SELECTED) {
                     return hexagon;
                 }
             }
@@ -294,7 +299,7 @@ private:
     std::pair<int, int> getSelectedHexagonBoardPosition() {
         for (int i = 0; i < hexagons.size(); i++) {
             for (int j = 0; j < hexagons[i].size(); j++) {
-                if (hexagons[i][j].getState() == State::SELECTED) {
+                if (hexagons[i][j].getState() == HexagonState::SELECTED) {
                     return std::make_pair(i, j);
                 }
             }
@@ -352,7 +357,7 @@ private:
     void resetStates() {
         for (auto &col: hexagons) {
             for (auto &hexagon: col) {
-                hexagon.setState(State::DEFAULT);
+                hexagon.setState(HexagonState::DEFAULT);
             }
         }
     }
@@ -415,182 +420,284 @@ private:
         if (row > 1) {
             auto &hexagon = getHexagon(column, row - 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //TOP RIGHT FIRST HEXAGON
         if (column < (hexagons.size() / 2) && row > 0) {
             auto &hexagon = getHexagon(column + 1, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 1) {
             auto &hexagon = getHexagon(column + 1, row - 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //TOP RIGHT SECOND HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
             auto &hexagon = getHexagon(column + 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1 && row > 0) {
             auto &hexagon = getHexagon(column + 2, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row > 1 && column < hexagons.size() - 2) {
             auto &hexagon = getHexagon(column + 2, row - 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //RIGHT HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
             auto &hexagon = getHexagon(column + 2, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1) {
             auto &hexagon = getHexagon(column + 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 &&
             column < hexagons.size() - 2) {
             auto &hexagon = getHexagon(column + 2, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //BOTTOM RIGHT FIRST HEXAGON
         if (column < (hexagons.size() / 2) - 1) {
             auto &hexagon = getHexagon(column + 2, row + 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 1) {
             auto &hexagon = getHexagon(column + 2, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column > (hexagons.size() / 2) - 1 && row < hexagons[column].size() - 2 && column < hexagons.size() - 2) {
             auto &hexagon = getHexagon(column + 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //BOTTOM RIGHT SECOND HEXAGON
         if (column < (hexagons.size() / 2) && row < hexagons[column].size() - 1) {
             auto &hexagon = getHexagon(column + 1, row + 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column >= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column < hexagons.size() - 1) {
             auto &hexagon = getHexagon(column + 1, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //BOTTOM HEXAGON
         if (row < hexagons[column].size() - 2) {
             auto &hexagon = getHexagon(column, row + 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //BOTTOM LEFT FIRST HEXAGON
         if (column > (hexagons.size() / 2) && row < hexagons[column].size() - 1) {
             auto &hexagon = getHexagon(column - 1, row + 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 0) {
             auto &hexagon = getHexagon(column - 1, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //BOTTOM LEFT SECOND HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
             auto &hexagon = getHexagon(column - 2, row + 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1 && row < hexagons[column].size() - 1) {
             auto &hexagon = getHexagon(column - 2, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row < hexagons[column].size() - 2 && column > 1) {
             auto &hexagon = getHexagon(column - 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //LEFT HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
             auto &hexagon = getHexagon(column - 2, row + 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1) {
             auto &hexagon = getHexagon(column - 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 0 && row < hexagons[column].size() - 1 && column >= 2) {
             auto &hexagon = getHexagon(column - 2, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //TOP LEFT FIRST HEXAGON
         if (column > (hexagons.size() / 2) + 1) {
             auto &hexagon = getHexagon(column - 2, row);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column == (hexagons.size() / 2) + 1 && row > 0) {
             auto &hexagon = getHexagon(column - 2, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 1 && column > 1) {
             auto &hexagon = getHexagon(column - 2, row - 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         //TOP LEFT SECOND HEXAGON
         if (column > (hexagons.size() / 2) && row > 0) {
             auto &hexagon = getHexagon(column - 1, row - 1);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
         if (column <= (hexagons.size() / 2) && row > 1 && column > 0) {
             auto &hexagon = getHexagon(column - 1, row - 2);
             if (hexagon.getOwner() == Player::NO_PLAYER)
-                hexagon.setState(State::JUMP_OPTION);
+                hexagon.setState(HexagonState::JUMP_OPTION);
         }
     }
 };
 
-int main() {
-    auto window = sf::RenderWindow{{1000, 600}, "Hexxagon"};
-    window.setFramerateLimit(144);
+class Game;
 
-    Board hexBoard(9, 9, 35, window);
+class Menu {
+public:
+    Menu(sf::RenderWindow &window, Game& game);
 
-    while (window.isOpen()) {
-        sf::Event event;
-        while (window.pollEvent(event)) {
+    void draw() {
+        updateTextColors();
 
-            if (event.type == sf::Event::Closed)
-                window.close();
+        window.draw(newGameText);
+        window.draw(loadGameText);
+        window.draw(exitText);
+    }
 
-            if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-                float mouseX = static_cast<float>(event.mouseButton.x);
-                float mouseY = static_cast<float>(event.mouseButton.y);
-                hexBoard.onMouseClick(mouseX, mouseY);
+    void onMouseClick(int mouseX, int mouseY);
+
+private:
+    sf::RenderWindow& window;
+    sf::Text newGameText, loadGameText, exitText;
+    sf::Font font;
+    Game& game;
+
+    void updateTextColors() {
+        updateTextColor(newGameText);
+        updateTextColor(loadGameText);
+        updateTextColor(exitText);
+    }
+
+    void updateTextColor(sf::Text& text) {
+        sf::FloatRect bounds = text.getGlobalBounds();
+        sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
+
+        if (bounds.contains(static_cast<float>(mousePosition.x), static_cast<float>(mousePosition.y))) {
+            text.setFillColor(sf::Color::Yellow);
+        } else {
+            text.setFillColor(sf::Color::White);
+        }
+    }
+};
+
+class Game {
+public:
+    Game(sf::RenderWindow& window) : window(window), gameState(GameState::Menu)  {}
+
+    void run() {
+
+        Menu mainMenu(window, *this);
+        Board hexBoard(9, 9, 35, window);
+
+        while (window.isOpen()) {
+            sf::Event event;
+            while (window.pollEvent(event)) {
+                if (event.type == sf::Event::Closed) window.close();
+
+                else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                    float mouseX = static_cast<float>(event.mouseButton.x);
+                    float mouseY = static_cast<float>(event.mouseButton.y);
+
+                    if (gameState == GameState::Menu) {
+                        mainMenu.onMouseClick(mouseX, mouseY);
+                    }
+
+                    if (gameState == GameState::Game) {
+                        hexBoard.onMouseClick(mouseX, mouseY);
+                    }
+                }
             }
+
+            window.clear();
+
+            if (gameState == GameState::Menu) {
+                mainMenu.draw();
+            }
+            if (gameState == GameState::Game) {
+                hexBoard.draw();
+            }
+
+            window.display();
+        }
+    }
+
+    void startGame() {
+        gameState = GameState::Game;
+    }
+
+private:
+    sf::RenderWindow& window;
+    GameState gameState;
+};
+
+Menu::Menu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
+        if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
+            throw std::runtime_error("Unable to load the font.");
         }
 
-        window.clear();
+        newGameText.setFont(font);
+        newGameText.setString("New game");
+        newGameText.setCharacterSize(40);
+        newGameText.setPosition((window.getSize().x - newGameText.getLocalBounds().width) / 2, 150);
 
-        //hexBoard.draw();
+        loadGameText.setFont(font);
+        loadGameText.setString("Load game");
+        loadGameText.setCharacterSize(40);
+        loadGameText.setPosition((window.getSize().x - loadGameText.getLocalBounds().width) / 2, 200);
 
-        window.display();
+        exitText.setFont(font);
+        exitText.setString("Exit");
+        exitText.setCharacterSize(40);
+        exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 250);
+}
+
+void Menu::onMouseClick(int mouseX, int mouseY) {
+    if (newGameText.getGlobalBounds().contains(mouseX, mouseY)) {
+        game.startGame();
+    } else if (loadGameText.getGlobalBounds().contains(mouseX, mouseY)) {
+        std::cout << "Wczytaj grę\n";
+    } else if (exitText.getGlobalBounds().contains(mouseX, mouseY)) {
+        window.close();
     }
+}
+
+int main() {
+    auto window = sf::RenderWindow{{1000, 600}, "Hexxagon"};
+
+    Game game(window);
+    game.run();
+
+    return 0;
 }
