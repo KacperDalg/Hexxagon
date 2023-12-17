@@ -23,7 +23,8 @@ enum class AdjacentHexagonsMode {
 
 enum class GameState {
     Menu,
-    Game
+    Game,
+    Paused
 };
 
 class Hexagon {
@@ -44,8 +45,8 @@ public:
         circle.setPosition(x - size * 0.6f, y - size * 0.6f);
         circle.setFillColor(sf::Color::Transparent);
 
-        owner = Player::NO_PLAYER;
-        currentState = HexagonState::DEFAULT;
+        setOwner(Player::NO_PLAYER);
+        setState(HexagonState::DEFAULT);
     }
 
     void draw() {
@@ -155,8 +156,12 @@ class Board {
 public:
     Board(int rows, int cols, float hexSize, sf::RenderWindow &window) : rows(rows), cols(cols), hexSize(hexSize),
                                                                          window(window), playerACounter(window, Player::PLAYER_A),
-                                                                         playerBCounter(window, Player::PLAYER_B) {
+                                                                         playerBCounter(window, Player::PLAYER_B) {}
+
+    void start() {
+        hexagons.clear();
         initializeHexagons();
+        calculatePoints();
         currentPlayer = Player::PLAYER_A;
     }
 
@@ -574,6 +579,45 @@ private:
 
 class Game;
 
+class PauseMenu {
+public:
+    PauseMenu(sf::RenderWindow &window, Game& game);
+
+    void draw() {
+        updateTextColors();
+
+        window.draw(background);
+        window.draw(backToGameText);
+        window.draw(saveAndExitText);
+        window.draw(exitText);
+    }
+
+    void onMouseClick(int mouseX, int mouseY);
+
+private:
+    sf::RenderWindow& window;
+    sf::Text backToGameText, saveAndExitText, exitText;
+    sf::RectangleShape background;
+    sf::Font font;
+    Game& game;
+
+    void updateTextColors() {
+        updateTextColor(backToGameText);
+        updateTextColor(saveAndExitText);
+        updateTextColor(exitText);
+    }
+
+    void updateTextColor(sf::Text& text) {
+        sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
+
+        if (text.getGlobalBounds().contains(static_cast<float>(mousePosition.x), static_cast<float>(mousePosition.y))) {
+            text.setFillColor(sf::Color::Yellow);
+        } else {
+            text.setFillColor(sf::Color::White);
+        }
+    }
+};
+
 class Menu {
 public:
     Menu(sf::RenderWindow &window, Game& game);
@@ -614,18 +658,19 @@ private:
 
 class Game {
 public:
-    Game(sf::RenderWindow& window) : window(window), gameState(GameState::Menu)  {}
+    Game(sf::RenderWindow& window) : window(window), gameState(GameState::Menu), hexBoard(9, 9, 35, window)  {}
 
     void run() {
 
         Menu mainMenu(window, *this);
-        Board hexBoard(9, 9, 35, window);
+        PauseMenu pauseMenu(window, *this);
 
         while (window.isOpen()) {
             sf::Event event;
             while (window.pollEvent(event)) {
-                if (event.type == sf::Event::Closed) window.close();
-
+                if (event.type == sf::Event::Closed) {
+                    window.close();
+                }
                 else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                     float mouseX = static_cast<float>(event.mouseButton.x);
                     float mouseY = static_cast<float>(event.mouseButton.y);
@@ -636,6 +681,21 @@ public:
 
                     if (gameState == GameState::Game) {
                         hexBoard.onMouseClick(mouseX, mouseY);
+                    }
+
+                    if (gameState == GameState::Paused) {
+                        pauseMenu.onMouseClick(mouseX, mouseY);
+                    }
+                }
+                else if (event.type == sf::Event::KeyPressed)
+                {
+                    if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Game)
+                    {
+                        gameState = GameState::Paused;
+                    }
+                    else if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Paused)
+                    {
+                        gameState = GameState::Game;
                     }
                 }
             }
@@ -648,18 +708,32 @@ public:
             if (gameState == GameState::Game) {
                 hexBoard.draw();
             }
+            if (gameState == GameState::Paused) {
+                hexBoard.draw();
+                pauseMenu.draw();
+            }
 
             window.display();
         }
     }
 
-    void startGame() {
+    void switchToGame() {
         gameState = GameState::Game;
+    }
+
+    void startNewGame() {
+        hexBoard.start();
+        gameState = GameState::Game;
+    }
+
+    void openMainMenu() {
+        gameState = GameState::Menu;
     }
 
 private:
     sf::RenderWindow& window;
     GameState gameState;
+    Board hexBoard;
 };
 
 Menu::Menu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
@@ -670,26 +744,70 @@ Menu::Menu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
         newGameText.setFont(font);
         newGameText.setString("New game");
         newGameText.setCharacterSize(40);
-        newGameText.setPosition((window.getSize().x - newGameText.getLocalBounds().width) / 2, 150);
+        newGameText.setPosition((window.getSize().x - newGameText.getLocalBounds().width) / 2, 200);
 
         loadGameText.setFont(font);
         loadGameText.setString("Load game");
         loadGameText.setCharacterSize(40);
-        loadGameText.setPosition((window.getSize().x - loadGameText.getLocalBounds().width) / 2, 200);
+        loadGameText.setPosition((window.getSize().x - loadGameText.getLocalBounds().width) / 2, 250);
 
         exitText.setFont(font);
         exitText.setString("Exit");
         exitText.setCharacterSize(40);
-        exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 250);
+        exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 300);
 }
 
 void Menu::onMouseClick(int mouseX, int mouseY) {
     if (newGameText.getGlobalBounds().contains(mouseX, mouseY)) {
-        game.startGame();
+        game.startNewGame();
     } else if (loadGameText.getGlobalBounds().contains(mouseX, mouseY)) {
         std::cout << "Wczytaj grę\n";
     } else if (exitText.getGlobalBounds().contains(mouseX, mouseY)) {
         window.close();
+    }
+}
+
+PauseMenu::PauseMenu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
+    if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
+        throw std::runtime_error("Unable to load the font.");
+    }
+
+    backToGameText.setFont(font);
+    backToGameText.setString("Back to game");
+    backToGameText.setCharacterSize(25);
+    backToGameText.setPosition((window.getSize().x - backToGameText.getLocalBounds().width) / 2, 230);
+
+    saveAndExitText.setFont(font);
+    saveAndExitText.setString("Save and exit");
+    saveAndExitText.setCharacterSize(25);
+    saveAndExitText.setPosition((window.getSize().x - saveAndExitText.getLocalBounds().width) / 2, 280);
+
+    exitText.setFont(font);
+    exitText.setString("Exit");
+    exitText.setCharacterSize(25);
+    exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 330);
+
+    float squareSizeX = 400.0f;
+    float squareSizeY = 300.0f;
+
+    float squarePosX = (window.getSize().x - squareSizeX) / 2;
+    float squarePosY = (window.getSize().y - squareSizeY) / 2;
+
+    background.setSize(sf::Vector2f(squareSizeX, squareSizeY));
+    background.setPosition(squarePosX, squarePosY);
+    background.setFillColor(sf::Color::Black);
+
+    background.setOutlineThickness(5);
+    background.setOutlineColor(sf::Color::Yellow);
+}
+
+void PauseMenu::onMouseClick(int mouseX, int mouseY) {
+    if (backToGameText.getGlobalBounds().contains(mouseX, mouseY)) {
+        game.switchToGame();
+    } else if (saveAndExitText.getGlobalBounds().contains(mouseX, mouseY)) {
+        std::cout << "Save and exit\n";
+    } else if (exitText.getGlobalBounds().contains(mouseX, mouseY)) {
+        game.openMainMenu();
     }
 }
 
