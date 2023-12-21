@@ -22,6 +22,7 @@ target_link_libraries(
         sfml-graphics
         sfml-window
         sfml-system
+        stdc++fs
 )
 IF (WIN32)
     add_custom_command(TARGET CMakeSFMLProject POST_BUILD

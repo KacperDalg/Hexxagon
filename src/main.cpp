@@ -2,6 +2,11 @@
 #include <cmath>
 #include <iostream>
 #include <utility>
+#include <experimental/filesystem>
+#include <fstream>
+#include <iomanip>
+#include <ctime>
+#include <sstream>
 
 enum class Player {
     NO_PLAYER = 0,
@@ -24,7 +29,8 @@ enum class AdjacentHexagonsMode {
 enum class GameState {
     Menu,
     Game,
-    Paused
+    Paused,
+    SavedGamesMenu
 };
 
 class Hexagon {
@@ -155,7 +161,8 @@ private:
 class Board {
 public:
     Board(int rows, int cols, float hexSize, sf::RenderWindow &window) : rows(rows), cols(cols), hexSize(hexSize),
-                                                                         window(window), playerACounter(window, Player::PLAYER_A),
+                                                                         window(window),
+                                                                         playerACounter(window, Player::PLAYER_A),
                                                                          playerBCounter(window, Player::PLAYER_B) {}
 
     void start() {
@@ -175,12 +182,74 @@ public:
         playerBCounter.draw();
     }
 
+    void save() {
+        std::experimental::filesystem::path folderPath = "../saved";
+
+        if (!std::experimental::filesystem::exists(folderPath)) {
+            std::experimental::filesystem::create_directory(folderPath);
+        }
+
+        //https://stackoverflow.com/questions/16357999/current-date-and-time-as-string
+
+        auto t = std::time(nullptr);
+        auto tm = *std::localtime(&t);
+
+        std::ostringstream oss;
+        oss << std::put_time(&tm, "%d-%m-%Y_%H-%M-%S");
+        auto dateString = oss.str();
+
+        auto fileName = "../saved/Hexxagon_" + dateString;
+
+        std::fstream file(fileName, std::ios::out);
+
+        if (file.is_open()) {
+            file << static_cast<int>(currentPlayer);
+            for (int i = 0; i < hexagons.size(); i++) {
+                for (int j = 0; j < hexagons[i].size(); j++) {
+                    file << static_cast<int>(hexagons[i][j].getOwner());
+                }
+            }
+
+            file.close();
+        }
+    }
+
+    void load(std::string fileName) {
+        start();
+
+        std::ifstream file("../saved/" + fileName);
+
+        if (file.is_open()) {
+            std::string line;
+            if (std::getline(file, line)) {
+                if (line.size() == 62) {
+                    currentPlayer = static_cast<Player>(static_cast<int>(line[0] - '0'));
+
+                    int index = 1;
+                    for (int i = 0; i < hexagons.size(); i++) {
+                        for (int j = 0; j < hexagons[i].size(); j++) {
+                            hexagons[i][j].setOwner(static_cast<Player>(static_cast<int>(line[index] - '0')));
+                            index++;
+                        }
+                    }
+                } else {
+                    throw std::runtime_error("Incorrect file content.");
+                }
+            } else {
+                throw std::runtime_error("File is empty.");
+            }
+            file.close();
+        }
+        calculatePoints();
+    }
+
     void onMouseClick(float mouseX, float mouseY) {
-        for (int i = 0; i < rows; i++) {
+        for (int i = 0; i < hexagons.size(); i++) {
             for (int j = 0; j < hexagons[i].size(); j++) {
                 if (hexagons[i][j].containsCoordinates(mouseX, mouseY)) {
 
-                    if (hexagons[i][j].getState() == HexagonState::DEFAULT || hexagons[i][j].getState() == HexagonState::SELECTED) {
+                    if (hexagons[i][j].getState() == HexagonState::DEFAULT ||
+                        hexagons[i][j].getState() == HexagonState::SELECTED) {
                         resetStates();
                     }
 
@@ -200,10 +269,7 @@ public:
                         hexagons[i][j].setOwner(getSelectedHexagon().getOwner());
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
-                        calculatePoints();
-                        checkForWinner();
-                        resetStates();
-                        changePlayer();
+                        prepareForNextMove();
                         return;
                     }
 
@@ -214,10 +280,7 @@ public:
                         selectedHexagon.setOwner(Player::NO_PLAYER);
                         setAdjacentHexagons(i, j, AdjacentHexagonsMode::TAKE_OVER_MODE);
 
-                        calculatePoints();
-                        checkForWinner();
-                        resetStates();
-                        changePlayer();
+                        prepareForNextMove();
                         return;
                     }
                 }
@@ -263,7 +326,7 @@ private:
 
             for (int j = 0; j < hexagons[i].size(); j++) {
                 if (j == 0 && (i == 0 || i == hexagons.size() - 1)
-                || i == hexagons.size() / 2 && j == hexagons[i].size() - 1)
+                    || i == hexagons.size() / 2 && j == hexagons[i].size() - 1)
                     hexagons[i][j].setOwner(Player::PLAYER_A);
 
                 if (j == hexagons[i].size() - 1 && (i == 0 || i == hexagons.size() - 1)
@@ -289,6 +352,13 @@ private:
                 }
             }
         }
+    }
+
+    void prepareForNextMove() {
+        calculatePoints();
+        checkForWinner();
+        resetStates();
+        changePlayer();
     }
 
     Hexagon &getSelectedHexagon() {
@@ -581,7 +651,7 @@ class Game;
 
 class PauseMenu {
 public:
-    PauseMenu(sf::RenderWindow &window, Game& game);
+    PauseMenu(sf::RenderWindow &window, Game &game);
 
     void draw() {
         updateTextColors();
@@ -595,11 +665,11 @@ public:
     void onMouseClick(int mouseX, int mouseY);
 
 private:
-    sf::RenderWindow& window;
+    sf::RenderWindow &window;
     sf::Text backToGameText, saveAndExitText, exitText;
     sf::RectangleShape background;
     sf::Font font;
-    Game& game;
+    Game &game;
 
     void updateTextColors() {
         updateTextColor(backToGameText);
@@ -607,7 +677,7 @@ private:
         updateTextColor(exitText);
     }
 
-    void updateTextColor(sf::Text& text) {
+    void updateTextColor(sf::Text &text) {
         sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
 
         if (text.getGlobalBounds().contains(static_cast<float>(mousePosition.x), static_cast<float>(mousePosition.y))) {
@@ -618,9 +688,76 @@ private:
     }
 };
 
+class SavedGamesMenu {
+public:
+    SavedGamesMenu(sf::RenderWindow &window, Game &game);
+
+    void draw() {
+        updateTextColors();
+
+        for (auto &text: savedGames) {
+            window.draw(text);
+        }
+        window.draw(savedGamesText);
+    }
+
+    void refresh() {
+        savedGames.clear();
+
+        std::experimental::filesystem::path folderPath = "../saved";
+
+        if (!std::experimental::filesystem::exists(folderPath)) {
+            std::experimental::filesystem::create_directory(folderPath);
+        }
+
+        int positionY = 70;
+        std::vector<std::experimental::filesystem::directory_entry> entries;
+        for (auto &plik: std::experimental::filesystem::directory_iterator(folderPath)) {
+            entries.emplace_back(plik);
+        }
+
+        std::reverse(entries.begin(), entries.end());
+
+        for (int i = 0; i < 9; i++) {
+            sf::Text savedGame;
+            savedGame.setFont(font);
+            savedGame.setString(entries[i].path().filename().string());
+            savedGame.setCharacterSize(30);
+            savedGame.setPosition((window.getSize().x - savedGame.getLocalBounds().width) / 2, positionY += 50);
+            savedGames.emplace_back(savedGame);
+        }
+    }
+
+    void onMouseClick(int mouseX, int mouseY);
+
+private:
+    sf::RenderWindow &window;
+    std::vector<sf::Text> savedGames;
+    sf::Text savedGamesText;
+    sf::Font font;
+    Game &game;
+
+    void updateTextColors() {
+        for (auto &text: savedGames) {
+            updateTextColor(text);
+        }
+    }
+
+    void updateTextColor(sf::Text &text) {
+        sf::FloatRect bounds = text.getGlobalBounds();
+        sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
+
+        if (bounds.contains(static_cast<float>(mousePosition.x), static_cast<float>(mousePosition.y))) {
+            text.setFillColor(sf::Color::Yellow);
+        } else {
+            text.setFillColor(sf::Color::White);
+        }
+    }
+};
+
 class Menu {
 public:
-    Menu(sf::RenderWindow &window, Game& game);
+    Menu(sf::RenderWindow &window, Game &game);
 
     void draw() {
         updateTextColors();
@@ -633,10 +770,10 @@ public:
     void onMouseClick(int mouseX, int mouseY);
 
 private:
-    sf::RenderWindow& window;
+    sf::RenderWindow &window;
     sf::Text newGameText, loadGameText, exitText;
     sf::Font font;
-    Game& game;
+    Game &game;
 
     void updateTextColors() {
         updateTextColor(newGameText);
@@ -644,7 +781,7 @@ private:
         updateTextColor(exitText);
     }
 
-    void updateTextColor(sf::Text& text) {
+    void updateTextColor(sf::Text &text) {
         sf::FloatRect bounds = text.getGlobalBounds();
         sf::Vector2i mousePosition = sf::Mouse::getPosition(window);
 
@@ -658,43 +795,32 @@ private:
 
 class Game {
 public:
-    Game(sf::RenderWindow& window) : window(window), gameState(GameState::Menu), hexBoard(9, 9, 35, window)  {}
+    Game(sf::RenderWindow &window) : window(window), gameState(GameState::Menu), hexBoard(9, 9, 35, window),
+                                     savedGamesMenu(window, *this), pauseMenu(window, *this), mainMenu(window, *this) {}
 
     void run() {
-
-        Menu mainMenu(window, *this);
-        PauseMenu pauseMenu(window, *this);
-
         while (window.isOpen()) {
             sf::Event event;
             while (window.pollEvent(event)) {
                 if (event.type == sf::Event::Closed) {
                     window.close();
-                }
-                else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+                } else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
                     float mouseX = static_cast<float>(event.mouseButton.x);
                     float mouseY = static_cast<float>(event.mouseButton.y);
 
                     if (gameState == GameState::Menu) {
                         mainMenu.onMouseClick(mouseX, mouseY);
-                    }
-
-                    if (gameState == GameState::Game) {
+                    } else if (gameState == GameState::SavedGamesMenu) {
+                        savedGamesMenu.onMouseClick(mouseX, mouseY);
+                    } else if (gameState == GameState::Game) {
                         hexBoard.onMouseClick(mouseX, mouseY);
-                    }
-
-                    if (gameState == GameState::Paused) {
+                    } else if (gameState == GameState::Paused) {
                         pauseMenu.onMouseClick(mouseX, mouseY);
                     }
-                }
-                else if (event.type == sf::Event::KeyPressed)
-                {
-                    if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Game)
-                    {
+                } else if (event.type == sf::Event::KeyPressed) {
+                    if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Game) {
                         gameState = GameState::Paused;
-                    }
-                    else if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Paused)
-                    {
+                    } else if (event.key.code == sf::Keyboard::Escape && gameState == GameState::Paused) {
                         gameState = GameState::Game;
                     }
                 }
@@ -704,6 +830,9 @@ public:
 
             if (gameState == GameState::Menu) {
                 mainMenu.draw();
+            }
+            if (gameState == GameState::SavedGamesMenu) {
+                savedGamesMenu.draw();
             }
             if (gameState == GameState::Game) {
                 hexBoard.draw();
@@ -730,44 +859,81 @@ public:
         gameState = GameState::Menu;
     }
 
+    void openSavedGamesMenu() {
+        savedGamesMenu.refresh();
+        gameState = GameState::SavedGamesMenu;
+    }
+
+    void saveGame() {
+        hexBoard.save();
+    }
+
+    void loadGame(std::string fileName) {
+        hexBoard.load(fileName);
+        gameState = GameState::Game;
+    }
+
 private:
-    sf::RenderWindow& window;
+    sf::RenderWindow &window;
     GameState gameState;
     Board hexBoard;
+    Menu mainMenu;
+    PauseMenu pauseMenu;
+    SavedGamesMenu savedGamesMenu;
 };
 
-Menu::Menu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
-        if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
-            throw std::runtime_error("Unable to load the font.");
-        }
+Menu::Menu(sf::RenderWindow &window, Game &game) : window(window), game(game) {
+    if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
+        throw std::runtime_error("Unable to load the font.");
+    }
 
-        newGameText.setFont(font);
-        newGameText.setString("New game");
-        newGameText.setCharacterSize(40);
-        newGameText.setPosition((window.getSize().x - newGameText.getLocalBounds().width) / 2, 200);
+    newGameText.setFont(font);
+    newGameText.setString("New game");
+    newGameText.setCharacterSize(40);
+    newGameText.setPosition((window.getSize().x - newGameText.getLocalBounds().width) / 2, 200);
 
-        loadGameText.setFont(font);
-        loadGameText.setString("Load game");
-        loadGameText.setCharacterSize(40);
-        loadGameText.setPosition((window.getSize().x - loadGameText.getLocalBounds().width) / 2, 250);
+    loadGameText.setFont(font);
+    loadGameText.setString("Load game");
+    loadGameText.setCharacterSize(40);
+    loadGameText.setPosition((window.getSize().x - loadGameText.getLocalBounds().width) / 2, 250);
 
-        exitText.setFont(font);
-        exitText.setString("Exit");
-        exitText.setCharacterSize(40);
-        exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 300);
+    exitText.setFont(font);
+    exitText.setString("Exit");
+    exitText.setCharacterSize(40);
+    exitText.setPosition((window.getSize().x - exitText.getLocalBounds().width) / 2, 300);
 }
 
 void Menu::onMouseClick(int mouseX, int mouseY) {
     if (newGameText.getGlobalBounds().contains(mouseX, mouseY)) {
         game.startNewGame();
     } else if (loadGameText.getGlobalBounds().contains(mouseX, mouseY)) {
-        std::cout << "Wczytaj grę\n";
+        game.openSavedGamesMenu();
     } else if (exitText.getGlobalBounds().contains(mouseX, mouseY)) {
         window.close();
     }
 }
 
-PauseMenu::PauseMenu(sf::RenderWindow &window, Game& game) : window(window), game(game) {
+SavedGamesMenu::SavedGamesMenu(sf::RenderWindow &window, Game &game) : window(window), game(game) {
+    if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
+        throw std::runtime_error("Unable to load the font.");
+    }
+
+    savedGamesText.setFont(font);
+    savedGamesText.setFillColor(sf::Color::Yellow);
+    savedGamesText.setString("Saved games");
+    savedGamesText.setCharacterSize(60);
+    savedGamesText.setPosition((window.getSize().x - savedGamesText.getLocalBounds().width) / 2, 10);
+}
+
+void SavedGamesMenu::onMouseClick(int mouseX, int mouseY) {
+    for (auto &savedGame: savedGames) {
+        if (savedGame.getGlobalBounds().contains(mouseX, mouseY)) {
+            game.loadGame(savedGame.getString().toAnsiString());
+        }
+    }
+}
+
+PauseMenu::PauseMenu(sf::RenderWindow &window, Game &game) : window(window), game(game) {
     if (!font.loadFromFile("../fonts/Silkscreen-Regular.ttf")) {
         throw std::runtime_error("Unable to load the font.");
     }
@@ -805,7 +971,8 @@ void PauseMenu::onMouseClick(int mouseX, int mouseY) {
     if (backToGameText.getGlobalBounds().contains(mouseX, mouseY)) {
         game.switchToGame();
     } else if (saveAndExitText.getGlobalBounds().contains(mouseX, mouseY)) {
-        std::cout << "Save and exit\n";
+        game.saveGame();
+        game.openMainMenu();
     } else if (exitText.getGlobalBounds().contains(mouseX, mouseY)) {
         game.openMainMenu();
     }
