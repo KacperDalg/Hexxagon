@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.26.4)
-project(CMakeSFMLProject)
+cmake_minimum_required(VERSION 3.25)
+project(Hexxagon)
 set(CMAKE_CXX_STANDARD 20)
 include(FetchContent)
 FetchContent_Declare(
@@ -14,19 +14,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmt)
 FetchContent_MakeAvailable(sfml)
-add_executable(CMakeSFMLProject src/main.cpp)
-configure_file(fonts/Silkscreen-Regular.ttf ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+add_executable(Hexxagon
+        src/Game.cpp
+        src/Main.cpp
+        src/Hexagon.cpp
+        src/Counter.cpp
+        src/Board.cpp
+        src/PauseMenu.cpp
+        src/Menu.cpp
+        src/SavedGamesMenu.cpp)
 target_link_libraries(
-        CMakeSFMLProject
+        Hexxagon
         fmt
         sfml-graphics
         sfml-window
         sfml-system
-        stdc++fs
 )
 IF (WIN32)
-    add_custom_command(TARGET CMakeSFMLProject POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:CMakeSFMLProject> $<TARGET_FILE_DIR:CMakeSFMLProject>
+    add_custom_command(TARGET Hexxagon POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:Hexxagon> $<TARGET_FILE_DIR:Hexxagon>
             COMMAND_EXPAND_LISTS
     )
 ENDIF ()
